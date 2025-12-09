@@ -2,17 +2,15 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copie des fichiers de dépendances
-COPY package.json ./
-
 # Installation des dépendances
+COPY package.json ./
 RUN npm install
 
-# Copie du reste du projet
+# Copie du code source
 COPY . .
 
-# Exposition du port
+# Port exposé
 EXPOSE 3000
 
-# Commande de démarrage
+# Démarrage
 CMD ["node", "server.js"]

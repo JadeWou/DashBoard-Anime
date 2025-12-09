@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -18,3 +19,30 @@
 </html>
 
 <!-- A voir modif les html -->
+=======
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Accueil</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="landing-page">
+    <div class="welcome-card">
+        <h1>Bienvenue</h1>
+        <p>Accédez à la base de données de vos animés préférés.</p>
+        
+        <div style="margin-top:20px;">
+            <input type="text" id="username" placeholder="Identifiant" style="padding:10px; margin:5px; width:80%;">
+            <input type="password" id="password" placeholder="Mot de passe" style="padding:10px; margin:5px; width:80%;">
+            <div style="margin-top:15px; display:flex; justify-content:center; gap:10px;">
+                <button onclick="login()" class="btn btn-primary">Se Connecter</button>
+                <a href="projet.html" class="btn btn-secondary">Visiteur</a>
+            </div>
+        </div>
+        <p id="errorMsg" style="color:red; display:none; margin-top:10px;"></p>
+    </div>
+    <script src="script_login.js"></script>
+</body>
+</html>
+>>>>>>> Stashed changes
