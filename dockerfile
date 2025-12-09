@@ -1,5 +1,18 @@
-# On utilise une image légère de serveur web (Nginx)
-FROM nginx:alpine
+FROM node:18-alpine
 
-# On copie tous les fichiers du dossier actuel vers le dossier du serveur dans le conteneur
-COPY . /usr/share/nginx/html
+WORKDIR /app
+
+# Copie des fichiers de dépendances
+COPY package.json ./
+
+# Installation des dépendances
+RUN npm install
+
+# Copie du reste du projet
+COPY . .
+
+# Exposition du port
+EXPOSE 3000
+
+# Commande de démarrage
+CMD ["node", "server.js"]

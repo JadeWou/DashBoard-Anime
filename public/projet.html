@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Données CSV</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <nav>
+            <a href="accueil.html">🏠 Accueil</a>
+            <a href="projet.html" class="active">📊 Données CSV</a>
+            <a href="stats.html">📈 Statistiques</a>
+            <a href="complexe.html" class="active">🌟 Complexe</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Tableau de Données</h1>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>Charger un CSV</label>
+                    <input type="file" id="csvFileInput" accept=".csv">
+                </div>
+                <div class="control-group">
+                    <label>Rechercher</label>
+                    <input type="text" id="searchBar" placeholder="Tapez pour filtrer...">
+                </div>
+            </div>
+
+            <div id="tableauContainer">
+                <p style="text-align:center; padding:20px; color:#777;">En attente d'un fichier...</p>
+            </div>
+
+            <div id="paginationControls" class="pagination" style="display:none;">
+                <button id="btnPrev">Précédent</button>
+                <span id="pageInfo">Page 1</span>
+                <button id="btnNext">Suivant</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- VARIABLES ---
+        let allData = [];
+        let filteredData = [];
+        let columns = []; 
+        let state = { page: 1, rowsPerPage: 50, sortCol: null, sortAsc: true };
+
+        // --- 1. LECTURE CSV INTELLIGENTE ---
+        function csvToJson(str) {
+            const rows = str.trim().split('\n');
+            if (rows.length === 0) return { data: [], columns: [] };
+
+            function parseLine(text) {
+                const values = []; let currentVal = ""; let inQuotes = false;
+                for (let i=0; i<text.length; i++) {
+                    const char = text[i];
+                    if (char === '"') inQuotes = !inQuotes;
+                    else if (char === ',' && !inQuotes) { values.push(currentVal); currentVal = ""; }
+                    else currentVal += char;
+                }
+                values.push(currentVal); return values;
+            }
+
+            const headers = parseLine(rows[0]).map(h => h.trim().replace(/^"|"$/g, ''));
+            const result = [];
+            for (let i=1; i<rows.length; i++) {
+                const rowStr = rows[i].trim(); if(!rowStr) continue;
+                const values = parseLine(rowStr); const obj = {};
+                headers.forEach((h, i) => {
+                    let val = values[i] ? values[i].trim() : "";
+                    val = val.replace(/^"|"$/g, '').replace(/""/g, '"');
+                    obj[h] = val;
+                });
+                result.push(obj);
+            }
+            return { data: result, columns: headers };
+        }
+
+        // --- 2. CHARGEMENT & SAUVEGARDE SESSION ---
+        document.getElementById("csvFileInput").addEventListener("change", function(e) {
+            const file = e.target.files[0]; if(!file) return;
+            const reader = new FileReader();
+            reader.readAsText(file);
+            reader.onload = function(evt) {
+                const parsed = csvToJson(evt.target.result);
+                allData = parsed.data; columns = parsed.columns;
+                
+                // SAUVEGARDE SESSION STORAGE
+                try {
+                    sessionStorage.setItem('myDashboardData', JSON.stringify(allData));
+                    alert("Données chargées dans la session !");
+                } catch(err) {
+                    console.warn("Trop gros, échantillon 2000 lignes.");
+                    try {
+                        const sample = allData.slice(0, 5000);
+                        sessionStorage.setItem('myDashboardData', JSON.stringify(sample));
+                        alert("Fichier lourd : Seules les 2000 premières lignes sont dispo pour les stats.");
+                    } catch(e2) {
+                        alert("Navigateur saturé : Impossible de garder les données pour les stats.");
+                    }
+                }
+
+                if(allData.length > 0) {
+                    filteredData = [...allData]; updateTable();
+                }
+            };
+        });
+
+        // --- 3. LOGIQUE TABLEAU ---
+        document.getElementById("searchBar").addEventListener("keyup", function(e) {
+            const txt = e.target.value.toLowerCase();
+            filteredData = allData.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(txt)));
+            state.page = 1; updateTable();
+        });
+
+        document.getElementById("btnPrev").addEventListener("click", () => changePage(-1));
+        document.getElementById("btnNext").addEventListener("click", () => changePage(1));
+
+        function changePage(d) {
+            const max = Math.ceil(filteredData.length/state.rowsPerPage);
+            if(state.page+d >= 1 && state.page+d <= max) { state.page+=d; updateTable(); }
+        }
+
+        function sortData(col) {
+            if (state.sortCol === col) state.sortAsc = !state.sortAsc; 
+            else { state.sortCol = col; state.sortAsc = true; }
+            filteredData.sort((a, b) => {
+                let valA = a[col]||"", valB = b[col]||"";
+                const numA = parseFloat(valA), numB = parseFloat(valB);
+                if (!isNaN(numA) && !isNaN(numB)) return state.sortAsc ? numA-numB : numB-numA;
+                return state.sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+            });
+            updateTable();
+        }
+
+        function updateTable() {
+            const container = document.getElementById("tableauContainer");
+            const pag = document.getElementById("paginationControls");
+            
+            if(filteredData.length===0) { container.innerHTML="<p style='text-align:center; padding:20px'>Aucune donnée.</p>"; pag.style.display="none"; return; }
+            pag.style.display="flex";
+
+            const start=(state.page-1)*state.rowsPerPage;
+            const data=filteredData.slice(start, start+state.rowsPerPage);
+            const total=Math.ceil(filteredData.length/state.rowsPerPage);
+            document.getElementById("pageInfo").innerText = `Page ${state.page} / ${total} (${filteredData.length})`;
+            
+            container.innerHTML = "";
+            const table = document.createElement("table");
+            const thead = document.createElement("thead");
+            const tbody = document.createElement("tbody");
+            const trHead = document.createElement("tr");
+
+            columns.forEach(col => {
+                const th = document.createElement("th");
+                th.textContent = col + (col === state.sortCol ? (state.sortAsc ? " ▲" : " ▼") : "");
+                th.style.cursor = "pointer";
+                th.addEventListener("click", () => sortData(col));
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                columns.forEach(col => {
+                    const td = document.createElement("td");
+                    let val = row[col] || "";
+                    if(val.length > 50 && !val.startsWith("http")) val = val.substring(0,50)+"...";
+                    td.textContent = val;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            table.appendChild(thead); table.appendChild(tbody); container.appendChild(table);
+        }
+
+        // Restauration auto
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = sessionStorage.getItem('myDashboardData');
+            if(saved) { 
+                try { allData = JSON.parse(saved); columns = Object.keys(allData[0]); filteredData=[...allData]; updateTable(); } 
+                catch(e){} 
+            }
+        });
+    </script>
+</body>
+</html>
