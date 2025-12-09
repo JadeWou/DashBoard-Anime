@@ -10,10 +10,10 @@
     <div class="sidebar">
         <h2>Menu</h2>
         <nav>
-            <a href="accueil.html">🏠 Accueil</a>
-            <a href="projet.html" class="active">📊 Données CSV</a>
+            <a href="projet.html">📊 Données CSV</a>
             <a href="stats.html">📈 Statistiques</a>
-            <a href="complexe.html" class="active">🌟 Complexe</a>
+            <a href="complexe.html">🌟 Données membres</a>
+            <a href="param.html">⚙️ Paramètres</a>
         </nav>
     </div>
 
@@ -21,12 +21,12 @@
         <div class="table-page-container">
             <h1 class="page-title">Tableau de Données</h1>
             
-            <div class="controls">
-                <div class="control-group">
+            <div class="filtres">
+                <div class="filtregroupe">
                     <label>Charger un CSV</label>
                     <input type="file" id="csvFileInput" accept=".csv">
                 </div>
-                <div class="control-group">
+                <div class="filtregroupe">
                     <label>Rechercher</label>
                     <input type="text" id="searchBar" placeholder="Tapez pour filtrer...">
                 </div>
@@ -51,11 +51,13 @@
         let columns = []; 
         let state = { page: 1, rowsPerPage: 50, sortCol: null, sortAsc: true };
 
-        // --- 1. LECTURE CSV INTELLIGENTE ---
+        // Lecture du CSV en Json
         function csvToJson(str) {
             const rows = str.trim().split('\n');
             if (rows.length === 0) return { data: [], columns: [] };
 
+
+            //fonction pour la lecture correct des colonnes ou il a des virgules dans les données (ex : genre / thème)
             function parseLine(text) {
                 const values = []; let currentVal = ""; let inQuotes = false;
                 for (let i=0; i<text.length; i++) {
@@ -82,7 +84,7 @@
             return { data: result, columns: headers };
         }
 
-        // --- 2. CHARGEMENT & SAUVEGARDE SESSION ---
+        // Chargement du CSV lorsque le fichier est sélectionner
         document.getElementById("csvFileInput").addEventListener("change", function(e) {
             const file = e.target.files[0]; if(!file) return;
             const reader = new FileReader();
@@ -91,34 +93,38 @@
                 const parsed = csvToJson(evt.target.result);
                 allData = parsed.data; columns = parsed.columns;
                 
-                // SAUVEGARDE SESSION STORAGE
+                // Sauvegarde en session local pour pouvoir utiliser les données sur les autres pages
                 try {
                     sessionStorage.setItem('myDashboardData', JSON.stringify(allData));
                     alert("Données chargées dans la session !");
                 } catch(err) {
-                    console.warn("Trop gros, échantillon 2000 lignes.");
+                    console.warn("Trop gros, échantillon 10000 lignes.");
                     try {
-                        const sample = allData.slice(0, 5000);
+                        const sample = allData.slice(0, 10000);
                         sessionStorage.setItem('myDashboardData', JSON.stringify(sample));
-                        alert("Fichier lourd : Seules les 2000 premières lignes sont dispo pour les stats.");
+                        alert("Fichier lourd : Seules les 10000 premières lignes sont dispo pour les stats.");
                     } catch(e2) {
                         alert("Navigateur saturé : Impossible de garder les données pour les stats.");
                     }
                 }
 
+                //mise a jour si le fichier est re selectionner
                 if(allData.length > 0) {
                     filteredData = [...allData]; updateTable();
                 }
             };
         });
 
-        // --- 3. LOGIQUE TABLEAU ---
+        // Filtres et pagination
+
+        //filtre dans l'intégrité des données, ici on transforme chaque ligne en une seule ligne de texte et on recherche un string dans cette ligne
         document.getElementById("searchBar").addEventListener("keyup", function(e) {
             const txt = e.target.value.toLowerCase();
             filteredData = allData.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(txt)));
             state.page = 1; updateTable();
         });
 
+        //changement de page lorsqu'on clique sur suivant ou precédent
         document.getElementById("btnPrev").addEventListener("click", () => changePage(-1));
         document.getElementById("btnNext").addEventListener("click", () => changePage(1));
 
@@ -127,6 +133,7 @@
             if(state.page+d >= 1 && state.page+d <= max) { state.page+=d; updateTable(); }
         }
 
+        //Fonction pour le trie du plus grand au plus petit ou de A a Z quand le nom de la colonne est cliqué
         function sortData(col) {
             if (state.sortCol === col) state.sortAsc = !state.sortAsc; 
             else { state.sortCol = col; state.sortAsc = true; }
@@ -139,6 +146,7 @@
             updateTable();
         }
 
+        //fonction écriture du tableau
         function updateTable() {
             const container = document.getElementById("tableauContainer");
             const pag = document.getElementById("paginationControls");
@@ -180,7 +188,7 @@
             table.appendChild(thead); table.appendChild(tbody); container.appendChild(table);
         }
 
-        // Restauration auto
+        // Garder les données afficher même si la page est recharger
         window.addEventListener('DOMContentLoaded', () => {
             const saved = sessionStorage.getItem('myDashboardData');
             if(saved) { 

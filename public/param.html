@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <nav>
+            <a href="projet.html">📊 Données CSV</a>
+            <a href="stats.html">📈 Statistiques</a>
+            <a href="complexe.html">🌟 Données membres</a>
+            <a href="param.html">⚙️ Paramètres</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Mon Compte</h1>
+
+            <div class="settings-container">
+                
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <h2 id="userNameDisplay">Utilisateur</h2>
+                        <span class="status-badge" id="userStatusDisplay">En ligne</span>
+                    </div>
+
+                    <div class="profile-details">
+                        <p><strong>Rôle :</strong> Administrateur</p>
+                        <p><strong>Dernière connexion :</strong> Aujourd'hui</p>
+                    </div>
+
+                    <div class="profile-actions">
+                        <button id="logoutBtn" class="btn btn-logout">
+                            🚪 Se Déconnecter
+                        </button>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>À propos de l'application</h3>
+                    <p>Dashboard d'analyse d'animés par WOUTERS Jade et SON Anthony</p>
+                    <p>Développé avec HTML, CSS et D3.js.</p>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. GESTION DE L'AFFICHAGE UTILISATEUR ---
+        // On essaie de récupérer un nom stocké, sinon on met "Admin" par défaut
+        const storedUser = sessionStorage.getItem('username'); // Si vous aviez stocké ça au login
+        const userName = storedUser ? storedUser : "Admin";
+        
+        // Mise à jour du DOM
+        document.getElementById('userNameDisplay').textContent = userName;
+
+        // --- 2. GESTION DE LA DÉCONNEXION ---
+        const btnLogout = document.getElementById('logoutBtn');
+
+        btnLogout.addEventListener('click', function() {
+            // A. On demande confirmation (optionnel mais sympa)
+            if(confirm("Voulez-vous vraiment vous déconnecter ?")) {
+                
+                // B. On vide TOUTES les données de la session (CSV, User, etc.)
+                sessionStorage.clear();
+                
+                // C. On redirige vers l'accueil
+                window.location.href = "accueil.html";
+            }
+        });
+    </script>
+
+</body>
+</html>

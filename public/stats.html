@@ -11,10 +11,10 @@
     <div class="sidebar">
         <h2>Menu</h2>
         <nav>
-            <a href="accueil.html">🏠 Accueil</a>
             <a href="projet.html">📊 Données CSV</a>
-            <a href="stats.html" class="active">📈 Statistiques</a>
-            <a href="complexe.html" class="active">🌟 Complexe</a>
+            <a href="stats.html">📈 Statistiques</a>
+            <a href="complexe.html">🌟 Données membres</a>
+            <a href="param.html">⚙️ Paramètres</a>
         </nav>
     </div>
 
@@ -22,24 +22,27 @@
         <div class="table-page-container">
             <h1 class="page-title">Tableau de Bord</h1>
 
+
+            <div class="filtres" style="display:flex; justify-content:center; margin-bottom:20px;">
+            <div class="filtregroupe">
+                <label for="studioSelect" style="font-weight:bold; margin-right:10px;">Filtrer par Studio :</label>
+                <select id="studioSelect" style="padding:8px; border-radius:5px; border:1px solid #ccc; min-width:200px;">
+                    <option value="All">Tous les studios</option>
+                    </select>
+            </div>
+            </div>
+
             <div id="dashboardContent">
-                <div class="charts-grid">
+                <div class="grilleGraph">
                     
-                    <div class="chart-card">
+                    <div class="graphique">
                         <h3>Répartition par Genre</h3>
                         <div id="graphGenre"></div>
                     </div>
 
-                    <div class="chart-card">
-                        <h3>Top 10 (Barres)</h3>
-                        <div id="chartBar"></div> 
-                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
-                    </div>
-
-                    <div class="chart-card">
-                        <h3>Graphique complexe</h3>
-                        <div id="chartBar"></div> 
-                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
+                    <div class="graphique">
+                        <h3>Nombre d'animé par année</h3>
+                        <div id="chartBar"></div>
                     </div>
 
                 </div>
@@ -48,20 +51,51 @@
     </main>
 
     <script>
-        // Recup data session (fonnées et user)
+        // Recup data (données et users)
         const saved = sessionStorage.getItem('myDashboardData');
-        const dash = document.getElementById("dashboardContent");
-        
+
+        //Exécution des fucntion des graphiques
         const allData = JSON.parse(saved);
             if (allData.length > 0) {
-                graphiqueGenre(allData);
+                    // A. On remplit la liste des studios automatiquement
+                    const selecteur = document.getElementById("studioSelect");
+                    // On prend tous les noms de studios uniques
+                    const listeStudios = [...new Set(allData.map(d => d.Studios || d.Studio))].sort();
+                    
+                    listeStudios.forEach(nom => {
+                        if(nom) { // Si le nom n'est pas vide
+                            const opt = document.createElement("option");
+                            opt.value = nom;
+                            opt.innerText = nom;
+                            selecteur.appendChild(opt);
+                        }
+                    });
+
+                    // B. Fonction qui met à jour quand on change le menu
+                    selecteur.addEventListener("change", function() {
+                        const choix = this.value;
+                        
+                        // Si "Tous", on garde tout, sinon on filtre ceux qui CONTIENNENT le nom
+                        const dataFiltree = (choix === "Tous") 
+                            ? allData 
+                            : allData.filter(d => (d.Studios || d.Studio || "").includes(choix));
+
+                        // On relance les dessins
+                        graphiqueGenre(dataFiltree);
+                        graphiqueNbAnime(dataFiltree);
+                    });
+
+                    // C. Premier affichage (Tout afficher au début)
+                    graphiqueGenre(allData);
+                    graphiqueNbAnime(allData);
             }
 
+        // ------------------------------------------------------------------- Camembert ---------------------------------------------------------------------------
 
-        // ------------------------------------------------------------------- PIE CHARTS ---------------------------------------------------------------------------
-
-        // 2. DESSIN PIE CHART
+        // 2. dessin du camembert
         function graphiqueGenre(data) {
+
+            document.getElementById("graphGenre").innerHTML = "";
             // Comptage des genres
             const nbGenre = {};
             data.forEach(item => {
@@ -82,7 +116,7 @@
 
 
             // D3 Config
-            const width = 400
+            const width = 550
             const height = 300
             const margin = 20;
             const radius = Math.min(width, height) / 2 - margin;
@@ -92,7 +126,7 @@
                 .attr("width", width)
                 .attr("height", height)
                 .append("g")
-                .attr("transform", `translate(${width/2 - 60}, ${height/2})`); // Décalé à gauche
+                .attr("transform", `translate(${width / 2 - 80}, ${height / 2+10})`);
 
             const color = d3.scaleOrdinal(d3.schemeSet2);
             const pie = d3.pie().value(d => d.value);
@@ -107,7 +141,7 @@
               .on("mouseout", function() { d3.select(this).style("opacity", 0.9); });
 
             // Légende
-            const legend = svg.append("g").attr("transform", `translate(${radius + 10}, -${radius})`);
+            const legend = svg.append("g").attr("transform", `translate(${radius + 30}, ${-radius + 50})`);
             chartData.forEach((d, i) => {
                 const row = legend.append("g").attr("transform", `translate(0, ${i * 25})`);
                 row.append("rect").attr("width", 15).attr("height", 15).attr("fill", color(d.label));
@@ -119,7 +153,160 @@
 
         // ------------------------------------------------------------------- BAR CHARTS ---------------------------------------------------------------------------
 
+       function graphiqueNbAnime(data) {
 
+       // --- DEBUG : Vérification des colonnes ---
+    console.log("Première ligne de données :", data[0]);
+    // Regardez dans la console (F12) si la colonne s'appelle bien "Released_Year"
+    
+    // --- 1. NETTOYAGE DES DONNÉES ---
+    const dataByYear = d3.rollup(data, 
+        v => v.length,
+        d => {
+            // TENTATIVE DE RECUPERATION ROBUSTE
+            // On essaie Released_Year, Released_Year, ou Start_Year au cas où
+            const annee = d.Released_Year;
+            return parseInt(annee);
+        }
+    );
+
+    let chartData = Array.from(dataByYear, ([Released_Year, count]) => ({ Released_Year, count }))
+        .filter(d => !isNaN(d.Released_Year) && d.Released_Year > 1950 && d.Released_Year < 2030) 
+        .sort((a, b) => a.Released_Year - b.Released_Year);
+
+    console.log("Données pour le graphique :", chartData);
+
+
+    // --- 2. CONFIGURATION D3 ---
+    const container = document.getElementById("chartBar");
+    if (!container) return;
+    container.innerHTML = "";
+
+    // A. Définition des Marges (Cadre)
+    const margin = {top: 20, right: 30, bottom: 50, left: 60};
+    
+    // B. Dimensions totales du conteneur
+    // On force 400px si le conteneur n'a pas de largeur définie
+    const width = container.clientWidth || 500; 
+    const height = 400;
+
+    // C. Dimensions INTERNES (Là où on dessine vraiment)
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+
+    // D. Création du SVG
+    const svg = d3.select("#chartBar")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        // CORRECTION MAJEURE ICI : On décale de la marge gauche et top
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+
+    // --- 3. ÉCHELLES (SCALES) ---
+    // Axe X (Années) : On utilise innerWidth
+    const x = d3.scaleLinear()
+        .domain(d3.extent(chartData, d => d.Released_Year))
+        .range([0, innerWidth]);
+
+    // Axe Y (Nombre) : On utilise innerHeight
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(chartData, d => d.count)])
+        .range([innerHeight, 0]);
+
+    // --- 4. AXES ---
+    // Axe X en bas (au niveau de innerHeight)
+    svg.append("g")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+    // Axe Y à gauche
+    svg.append("g")
+        .call(d3.axisLeft(y));
+
+
+    // Titre Axe X (Années)
+    svg.append("text")
+        .attr("text-anchor", "middle")
+        .attr("x", innerWidth / 2)         // Centré horizontalement
+        .attr("y", innerHeight + 40)       // En bas (sous l'axe)
+        .text("Années")
+        .style("font-size", "14px")
+        .style("fill", "#333");
+
+    // Titre Axe Y (Nombre d'animés)
+    svg.append("text")
+        .attr("text-anchor", "middle")
+        .attr("transform", "rotate(-90)")  // Rotation verticale
+        .attr("y", -45)                    // Décalé vers la gauche
+        .attr("x", -innerHeight / 2)       // Centré verticalement
+        .text("Nombre d'animés")
+        .style("font-size", "14px")
+        .style("fill", "#333");
+
+    // --- 5. LIGNE ---
+    const lineGenerator = d3.line()
+        .x(d => x(d.Released_Year))
+        .y(d => y(d.count))
+        .curve(d3.curveMonotoneX);
+
+    svg.append("path")
+        .datum(chartData)
+        .attr("class", "line-path")
+        .attr("d", lineGenerator)
+        .style("fill", "none")
+        .style("stroke", "#009879")
+        .style("stroke-width", "3px");
+
+    // --- 6. INTERACTIVITÉ (POINTS) ---
+    // Création du tooltip s'il n'existe pas déjà dans le DOM
+    let tooltip = document.getElementById("tooltip");
+    if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.id = "tooltip";
+        tooltip.className = "tooltip";
+        tooltip.style.position = "absolute";
+        tooltip.style.background = "rgba(0,0,0,0.8)";
+        tooltip.style.color = "white";
+        tooltip.style.padding = "5px 10px";
+        tooltip.style.borderRadius = "4px";
+        tooltip.style.pointerEvents = "none";
+        tooltip.style.opacity = "0";
+        document.body.appendChild(tooltip);
+    }
+
+    // Ajout des points
+    svg.selectAll(".dot")
+        .data(chartData)
+        .enter()
+        .append("circle")
+        .attr("class", "dot")
+        .attr("cx", d => x(d.Released_Year))
+        .attr("cy", d => y(d.count))
+        .attr("r", 5)
+        .style("fill", "#009879")
+        .style("cursor", "pointer")
+        .on("mouseover", (event, d) => {
+            d3.select(event.currentTarget)
+                .transition().duration(200)
+                .attr("r", 8)
+                .style("fill", "orange");
+                
+            tooltip.style.opacity = 1;
+            tooltip.innerHTML = `<strong>Année ${d.Released_Year}</strong><br>${d.count} animés`;
+            tooltip.style.left = (event.pageX + 10) + "px";
+            tooltip.style.top = (event.pageY - 28) + "px";
+        })
+        .on("mouseout", (event) => {
+            d3.select(event.currentTarget)
+                .transition().duration(200)
+                .attr("r", 5)
+                .style("fill", "#009879");
+                
+            tooltip.style.opacity = 0;
+        });
+}
 
     </script>
 </body>
