@@ -15,18 +15,18 @@
             <a href="accueil.html">🏠 Accueil</a>
             <a href="projet.html">📊 Données CSV</a>
             <a href="stats.html">📈 Statistiques</a>
-            <a href="complexe.html" class="active">🌟 Complexe</a>
-            <a href="/api/logout" style="margin-top:20px; color:#e74c3c;">🚪 Déconnexion</a>
+            <a href="complexe.html" class="active">🌟 Données membres</a>
+            <a href="param.html">⚙️ Paramètres</a>
         </nav>
     </div>
 
     <main class="main-content">
         <div class="table-page-container">
-            <h1 class="page-title">Les animés les plus populaires !</h1>
+            <h1 class="page-title">Les animés avec le plus de membres !</h1>
 
             <div id="dashboardContent">
                 <div class="chart-card" style="width: 100%; min-height: 600px; justify-content: center;">
-                    <div id="zoneGraphique" style="width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; background:#f9f9f9; border:2px dashed #ddd; border-radius:10px; margin:20px;">
+                    <div id="zoneGraphique" style="width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; background:#2c3e50; border-radius:10px; margin:10px;">
                     </div>
                 </div>
             </div>
@@ -34,73 +34,107 @@
     </main>
 
     <script>
-        // --- VÉRIFICATION SÉCURITÉ (Admin Only) ---
+        // --- 1. SÉCURITÉ ADMIN ---
         fetch('/api/session').then(r=>r.json()).then(d => {
-            // Si pas connecté OU si le rôle n'est pas 'admin', on renvoie à l'accueil
             if(!d.loggedIn || d.user.role !== 'admin') window.location.href='accueil.html';
         });
 
-        // --- CODE D3 (Graphique à bulles) ---
+        // --- 2. CODE D3 BULLES ---
         const saved = sessionStorage.getItem('myDashboardData');
         if (saved) {
             const allData = JSON.parse(saved);
             if (allData.length > 0) {
-                 // On prépare les données et on lance le dessin
-                 bullePopulaire(transformDataForPack(allData));
+                 bubbleGraph(allData);
             }
         } else {
-            document.getElementById("zoneGraphique").innerText = "Merci de charger le CSV d'abord.";
+            document.getElementById("zoneGraphique").innerText = "Chargez le CSV d'abord.";
         }
 
-        // Fonction pour grouper les animés par 'Type' (TV, Movie, OVA...)
-        // D3.pack a besoin d'une hiérarchie (Parent > Enfant)
-        function transformDataForPack(data) {
-            const grouped = d3.rollup(data, v => v.length, d => d.Type || "Inconnu");
-            return Array.from(grouped, ([name, value]) => ({name, value}));
-        }
-
-        function bullePopulaire(dataHierarchy) {
-            const container = document.getElementById("zoneGraphique");
-            container.innerHTML = ""; // On vide avant de dessiner
-
-            const width = 800;
+        function bubbleGraph(dataSource) {
+            const width = 1000; 
             const height = 800;
-            const format = d3.format(",d");
-            const color = d3.scaleOrdinal(d3.schemeTableau10); // Belle palette de couleurs
+            const padding = 40;
 
-            // Configuration du Layout "Pack" (Cercles dans des cercles)
-            const pack = d3.pack().size([width, height]).padding(3);
-            const root = pack(d3.hierarchy({children: dataHierarchy}).sum(d => d.value));
+            // Trier et garder le top 50
+            const triMembers = dataSource.sort((a, b) => b.Members - a.Members).slice(0, 50);
 
-            const svg = d3.create("svg")
-                .attr("width", width)
-                .attr("height", height)
-                .attr("viewBox", [0, 0, width, height])
-                .attr("style", "max-width: 100%; height: auto; font: 10px sans-serif;")
-                .attr("text-anchor", "middle");
+            const pack = d3.pack().size([width - padding, height - padding]).padding(5);
+            const hierarchy = d3.hierarchy({children: triMembers})
+                .sum(d => Math.pow(d.Members, 3)); // Accentuer les différences
 
-            const node = svg.append("g")
-                .selectAll("g")
-                .data(root.leaves())
-                .join("g")
-                .attr("transform", d => `translate(${d.x},${d.y})`);
+            const root = pack(hierarchy);
 
-            // On dessine les cercles
-            node.append("circle")
-                .attr("fill-opacity", 0.7)
-                .attr("fill", d => color(d.data.name))
-                .attr("r", d => d.r);
+            // Création SVG
+            d3.select("#zoneGraphique").html(""); 
+            const svg = d3.select("#zoneGraphique")
+                .append("svg")
+                .attr("width", width).attr("height", height)
+                .attr("viewBox", `0 0 ${width} ${height}`)
+                .style("max-width", "100%").style("height", "auto");
 
-            // On ajoute le texte (Nom du type + nombre)
-            node.append("text")
-                .selectAll("tspan")
-                .data(d => [d.data.name, format(d.value)])
-                .join("tspan")
-                .attr("x", 0)
-                .attr("y", (d, i, nodes) => `${i - nodes.length / 2 + 0.8}em`)
-                .text(d => d);
+            // --- PATTERNS (IMAGES) ---
+            const defs = svg.append("defs");
+            defs.selectAll("pattern")
+                .data(root.descendants().slice(1))
+                .enter().append("pattern")
+                .attr("id", (d, i) => "img-pattern-" + i)
+                .attr("height", "100%").attr("width", "100%")
+                .attr("patternContentUnits", "objectBoundingBox")
+                .append("image")
+                .attr("height", 1).attr("width", 1)
+                .attr("preserveAspectRatio", "xMidYMid slice")
+                .attr("xlink:href", d => d.data.image); // Colonne Image du CSV
 
-            container.appendChild(svg.node());
+            // --- BULLES ---
+            const bubbles = svg.selectAll(".bubble")
+                .data(root.descendants().slice(1))
+                .enter().append("g")
+                .attr("class", "bubble")
+                .attr("transform", d => `translate(${d.x + padding / 2}, ${d.y + padding / 2})`)
+                .on("mouseover", function(event, d) {
+                    d3.select(this).raise()
+                      .transition().duration(100)
+                      .attr("transform", `translate(${d.x + padding / 2}, ${d.y + padding / 2}) scale(1.2)`);
+                    d3.select(this).select("circle:nth-of-type(2)") // Le voile noir
+                      .transition().duration(100).style("opacity", 0);
+                })
+                .on("mouseout", function(event, d) {
+                    d3.select(this).transition().duration(100)
+                      .attr("transform", `translate(${d.x + padding / 2}, ${d.y + padding / 2}) scale(1)`);
+                    d3.select(this).select("circle:nth-of-type(2)")
+                      .transition().duration(100).style("opacity", 0.4);
+                });
+
+            // Fond Image
+            bubbles.append("circle")
+                .attr("r", d => d.r)
+                .style("fill", (d, i) => `url(#img-pattern-${i})`)
+                .style("stroke", "white").style("stroke-width", 2);
+
+            // Voile Noir
+            bubbles.append("circle")
+                .attr("r", d => d.r)
+                .style("fill", "black").style("opacity", 0.4);
+
+            // Infobulle native
+            bubbles.append("title")
+                .text(d => `${d.data.title}\nMembres : ${Math.round(d.data.Members).toLocaleString()}`);
+
+            // Textes
+            const textGroup = bubbles.append("text")
+                .attr("dy", "-0.4em")
+                .style("text-anchor", "middle")
+                .style("fill", "white")
+                .style("font-size", d => Math.min(d.r / 3, 12) + "px")
+                .style("pointer-events", "none");
+
+            textGroup.append("tspan")
+                .attr("x", 0).attr("dy", "0em")
+                .text(d => d.data.title.substring(0, 15) + "...");
+
+            textGroup.append("tspan")
+                .attr("x", 0).attr("dy", "1.2em")
+                .text(d => Math.round(d.data.Members).toLocaleString());
         }
     </script>
 </body>

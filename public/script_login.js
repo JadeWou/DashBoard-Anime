@@ -1,14 +1,12 @@
 async function login() {
-    // On récupère ce que l'utilisateur a tapé
+    console.log("Tentative de connexion...");
     const u = document.getElementById("username").value;
     const p = document.getElementById("password").value;
     const errorMsg = document.getElementById("errorMsg");
     
-    // On cache le message d'erreur au début
-    errorMsg.style.display = 'none';
+    if(errorMsg) errorMsg.style.display = 'none';
 
     try {
-        // On envoie les données au serveur (server.js)
         const res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -17,16 +15,30 @@ async function login() {
         const data = await res.json();
 
         if (data.success) {
-            // Si c'est bon, on redirige selon le rôle
-            if (data.role === 'admin') window.location.href = 'complexe.html';
-            else window.location.href = 'stats.html';
+            console.log("Rôle reçu du serveur :", data.role);
+            
+            // Stockage temporaire du nom pour l'affichage profil
+            sessionStorage.setItem('username', u);
+
+            // Redirection STRICTE
+            if (data.role === 'admin') {
+                console.log("Redirection -> Complexe");
+                window.location.href = 'complexe.html';
+            } else {
+                console.log("Redirection -> Stats");
+                window.location.href = 'stats.html';
+            }
         } else {
-            // Sinon on affiche l'erreur
-            errorMsg.style.display = 'block';
-            errorMsg.innerText = data.error;
+            if(errorMsg) {
+                errorMsg.style.display = 'block';
+                errorMsg.innerText = data.error;
+            }
         }
     } catch (e) {
-        errorMsg.style.display = 'block';
-        errorMsg.innerText = "Problème de connexion avec le serveur.";
+        console.error("Erreur JS:", e);
+        if(errorMsg) {
+            errorMsg.style.display = 'block';
+            errorMsg.innerText = "Erreur de communication avec le serveur.";
+        }
     }
 }

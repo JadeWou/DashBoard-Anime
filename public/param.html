@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <nav>
+            <a href="accueil.html">🏠 Accueil</a>
+            <a href="projet.html">📊 Données CSV</a>
+            <a href="stats.html" id="linkStats">📈 Statistiques</a>
+            <a href="complexe.html" id="linkComplexe">🌟 Données membres</a>
+            <a href="param.html" class="active">⚙️ Paramètres</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Mon Compte</h1>
+
+            <div class="settings-container">
+                
+                <div class="profile-card">
+                    <div class="profile-header">
+                        <h2 id="userNameDisplay">Visiteur</h2>
+                        <span class="status-badge" id="userStatusDisplay">En ligne</span>
+                    </div>
+
+                    <div class="profile-details">
+                        <p><strong>Rôle :</strong> <span id="userRoleDisplay">Visiteur</span></p>
+                    </div>
+
+                    <div class="profile-actions" id="logoutSection" style="display:none;">
+                        <button id="logoutBtn" class="btn btn-logout">
+                            🚪 Se Déconnecter
+                        </button>
+                    </div>
+                    
+                    <div class="profile-actions" id="loginSection">
+                        <a href="accueil.html" class="btn btn-primary" style="display:block; text-align:center;">Se connecter</a>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>À propos de l'application</h3>
+                    <p>Dashboard d'analyse d'animés.</p>
+                    <p>Développé par <strong>SON Anthony</strong> et <strong>WOUTERS Jade</strong>.</p>
+                    <p style="font-size:0.9em; color:#777;">Technologies : HTML, CSS, D3.js, Node.js, Docker.</p>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- GESTION MENU & USER ---
+        fetch('/api/session').then(r=>r.json()).then(d => {
+            const linkStats = document.getElementById('linkStats');
+            const linkComplexe = document.getElementById('linkComplexe');
+            const logoutSection = document.getElementById('logoutSection');
+            const loginSection = document.getElementById('loginSection');
+            const userNameDisplay = document.getElementById('userNameDisplay');
+            const userRoleDisplay = document.getElementById('userRoleDisplay');
+
+            if(!d.loggedIn) {
+                // VISITEUR
+                if(linkStats) linkStats.style.display='none';
+                if(linkComplexe) linkComplexe.style.display='none';
+            } else {
+                // CONNECTE
+                if(logoutSection) logoutSection.style.display = 'block';
+                if(loginSection) loginSection.style.display = 'none';
+                if(userNameDisplay) userNameDisplay.textContent = d.user.username;
+                if(userRoleDisplay) userRoleDisplay.textContent = d.user.role;
+
+                // Si User non-admin
+                if (d.user.role !== 'admin' && linkComplexe) {
+                    linkComplexe.style.display='none';
+                }
+            }
+        });
+
+        // --- DECONNEXION ---
+        const btnLogout = document.getElementById('logoutBtn');
+        if(btnLogout) {
+            btnLogout.addEventListener('click', function() {
+                if(confirm("Voulez-vous vraiment vous déconnecter ?")) {
+                    sessionStorage.clear(); 
+                    window.location.href = "/api/logout";
+                }
+            });
+        }
+    </script>
+</body>
+</html>

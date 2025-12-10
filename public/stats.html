@@ -14,8 +14,8 @@
             <a href="accueil.html">🏠 Accueil</a>
             <a href="projet.html">📊 Données CSV</a>
             <a href="stats.html" class="active">📈 Statistiques</a>
-            <a href="complexe.html" id="linkComplexe">🌟 Complexe</a>
-            <a href="/api/logout" style="margin-top:20px; color:#e74c3c;">🚪 Déconnexion</a>
+            <a href="complexe.html" id="linkComplexe">🌟 Données membres</a>
+            <a href="param.html">⚙️ Paramètres</a>
         </nav>
     </div>
 
@@ -23,21 +23,32 @@
         <div class="table-page-container">
             <h1 class="page-title">Tableau de Bord</h1>
 
-            <div id="dashboardContent">
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <h3>Répartition par Genre</h3>
-                        <div id="graphGenre"></div>
+            <div id="noDataMessage" style="display:none; text-align:center; padding:40px; background:white; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
+                <h3 style="color:#e74c3c;">Aucune donnée chargée !</h3>
+                <p>Pour voir les statistiques, vous devez d'abord charger le fichier CSV.</p>
+                <a href="projet.html" class="btn btn-primary" style="margin-top:10px;">Aller charger le CSV</a>
+            </div>
+
+            <div id="statsContent">
+                <div class="filtres" style="display:flex; justify-content:center; margin-bottom:20px;">
+                    <div class="filtregroupe">
+                        <label for="studioSelect" style="font-weight:bold; margin-right:10px;">Filtrer par Studio :</label>
+                        <select id="studioSelect" style="padding:8px; border-radius:5px; border:1px solid #ccc; min-width:200px;">
+                            <option value="All">Tous les studios</option>
+                        </select>
                     </div>
-                    <div class="chart-card">
-                        <h3>Top 10 (Barres)</h3>
-                        <div id="chartBar"></div> 
-                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
-                    </div>
-                    <div class="chart-card">
-                        <h3>Graphique complexe</h3>
-                        <div id="chartComplexPreview"></div> 
-                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
+                </div>
+
+                <div id="dashboardContent">
+                    <div class="grilleGraph">
+                        <div class="graphique">
+                            <h3>Répartition par Genre</h3>
+                            <div id="graphGenre"></div>
+                        </div>
+                        <div class="graphique">
+                            <h3>Nombre d'animé par année</h3>
+                            <div id="chartBar"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -45,35 +56,82 @@
     </main>
 
     <script>
-        // --- SÉCURITÉ CÔTÉ NAVIGATEUR ---
+        // --- 1. SÉCURITÉ ---
         fetch('/api/session').then(r=>r.json()).then(d => {
-            // Si le serveur dit qu'on n'est pas connecté, hop retour accueil
             if(!d.loggedIn) window.location.href='accueil.html';
-            
-            // Si on n'est pas admin, on cache le lien complexe
             const linkComplexe = document.getElementById('linkComplexe');
-            if(d.user.role !== 'admin' && linkComplexe) {
-                linkComplexe.style.display='none';
-            }
+            if(d.user.role !== 'admin' && linkComplexe) linkComplexe.style.display='none';
         });
 
-        // --- GRAPHIQUES D3 ---
+        // --- 2. DONNÉES ---
         const saved = sessionStorage.getItem('myDashboardData');
+        const noDataMsg = document.getElementById("noDataMessage");
+        const statsContent = document.getElementById("statsContent");
         
         if (saved) {
-             const allData = JSON.parse(saved);
-             if (allData.length > 0) graphiqueGenre(allData);
+             try {
+                 const allData = JSON.parse(saved);
+                 if (allData.length > 0) {
+                     // On affiche le contenu et on cache le message d'erreur
+                     noDataMsg.style.display = "none";
+                     statsContent.style.display = "block";
+                     initDashboard(allData);
+                 } else {
+                     throw new Error("Données vides");
+                 }
+             } catch(e) {
+                 showError();
+             }
         } else {
-             document.getElementById("dashboardContent").innerHTML = "<p style='text-align:center'>Oups ! Il faut charger un fichier CSV dans l'onglet 'Données CSV' d'abord.</p>";
+             showError();
         }
 
+        function showError() {
+            noDataMsg.style.display = "block";
+            statsContent.style.display = "none";
+        }
+
+        function initDashboard(allData) {
+            // A. Remplissage sélecteur Studio
+            const selecteur = document.getElementById("studioSelect");
+            // On récupère les studios, on les nettoie (trim) et on filtre les vides
+            const listeStudios = [...new Set(allData.map(d => (d.Studios || d.Studio || "").trim()))]
+                .filter(s => s !== "")
+                .sort();
+            
+            listeStudios.forEach(nom => {
+                const opt = document.createElement("option");
+                opt.value = nom;
+                opt.innerText = nom;
+                selecteur.appendChild(opt);
+            });
+
+            // B. Event Change
+            selecteur.addEventListener("change", function() {
+                const choix = this.value;
+                const dataFiltree = (choix === "All" || choix === "Tous les studios") 
+                    ? allData 
+                    : allData.filter(d => (d.Studios || d.Studio || "").includes(choix));
+                
+                graphiqueGenre(dataFiltree);
+                graphiqueNbAnime(dataFiltree);
+            });
+
+            // C. Premier affichage
+            graphiqueGenre(allData);
+            graphiqueNbAnime(allData);
+        }
+
+        // --- 3. GRAPHIQUE GENRE ---
         function graphiqueGenre(data) {
-            // 1. On compte les genres (Action, Comédie, etc.)
+            const container = document.getElementById("graphGenre");
+            if(!container) return;
+            container.innerHTML = "";
+
             const nbGenre = {};
             data.forEach(item => {
                 const key = Object.keys(item).find(k => k.toLowerCase().includes("genre"));
                 if (key && item[key]) {
-                    // On sépare les genres (ex: "Action, Comedy" -> "Action" et "Comedy")
                     item[key].replace(/"/g, '').split(',').forEach(g => {
                         const clean = g.trim();
                         if (clean) nbGenre[clean] = (nbGenre[clean] || 0) + 1;
@@ -81,46 +139,111 @@
                 }
             });
 
-            // On garde seulement le top 8 pour que le graphique reste lisible
             const chartData = Object.entries(nbGenre)
-                .sort((a, b) => b[1] - a[1]) // Tri du plus grand au plus petit
+                .sort((a, b) => b[1] - a[1])
                 .slice(0, 8)
                 .map(([label, value]) => ({ label, value }));
 
-            // 2. Configuration D3
-            const width = 400;
-            const height = 300;
-            const margin = 20;
+            if(chartData.length === 0) {
+                container.innerHTML = "<p>Pas assez de données pour ce filtre.</p>";
+                return;
+            }
+
+            const width = 400, height = 300, margin = 20;
             const radius = Math.min(width, height) / 2 - margin;
             
-            // Création de la zone de dessin (SVG)
             const svg = d3.select("#graphGenre").append("svg")
-                .attr("width", width)
-                .attr("height", height)
-                .append("g")
-                .attr("transform", `translate(${width/2 - 60}, ${height/2})`);
+                .attr("width", width).attr("height", height)
+                .append("g").attr("transform", `translate(${width/2 - 60}, ${height/2})`);
 
-            const color = d3.scaleOrdinal(d3.schemeSet2); // Couleurs auto
+            const color = d3.scaleOrdinal(d3.schemeSet2);
             const pie = d3.pie().value(d => d.value);
             const data_ready = pie(chartData);
             const arc = d3.arc().innerRadius(0).outerRadius(radius);
 
-            // Dessin des parts
             svg.selectAll('path').data(data_ready).enter().append('path')
               .attr('d', arc).attr('fill', d => color(d.data.label))
               .attr("stroke", "white").style("stroke-width", "2px").style("opacity", 0.9)
-              // Petit effet au survol de la souris
               .on("mouseover", function() { d3.select(this).style("opacity", 1); })
               .on("mouseout", function() { d3.select(this).style("opacity", 0.9); });
 
-            // Ajout de la légende
-            const legend = svg.append("g").attr("transform", `translate(${radius + 10}, -${radius})`);
+            // Nombres dans les parts
+            svg.selectAll('text.slice-label').data(data_ready).join('text')
+                .text(d => d.data.value)
+                .attr("transform", d => `translate(${arc.centroid(d)})`)
+                .style("text-anchor", "middle").style("font-size", "11px").style("fill", "white").style("pointer-events", "none");
+
+            // Légende
+            const legend = svg.append("g").attr("transform", `translate(${radius + 20}, -${radius})`);
             chartData.forEach((d, i) => {
                 const row = legend.append("g").attr("transform", `translate(0, ${i * 25})`);
                 row.append("rect").attr("width", 15).attr("height", 15).attr("fill", color(d.label));
                 row.append("text").attr("x", 20).attr("y", 12).text(`${d.label} (${d.value})`)
-                   .style("font-size", "13px").style("font-family", "sans-serif").attr("alignment-baseline", "middle");
+                   .style("font-size", "12px").style("font-family", "sans-serif").attr("alignment-baseline", "middle");
             });
+        }
+
+        // --- 4. GRAPHIQUE BARRES ---
+        function graphiqueNbAnime(data) {
+            const container = document.getElementById("chartBar");
+            if (!container) return;
+            container.innerHTML = "";
+
+            const dataByYear = d3.rollup(data, 
+                v => v.length,
+                d => {
+                    const key = Object.keys(d).find(k => k.includes("Year"));
+                    return parseInt(d[key] || d.Released_Year);
+                }
+            );
+
+            let chartData = Array.from(dataByYear, ([year, count]) => ({ year, count }))
+                .filter(d => !isNaN(d.year) && d.year > 1960 && d.year < 2030)
+                .sort((a, b) => a.year - b.year);
+
+            if(chartData.length === 0) {
+                container.innerHTML = "<p>Pas de données temporelles valides.</p>";
+                return;
+            }
+
+            const margin = {top: 20, right: 30, bottom: 50, left: 60};
+            const width = 450, height = 350;
+            const innerWidth = width - margin.left - margin.right;
+            const innerHeight = height - margin.top - margin.bottom;
+
+            const svg = d3.select("#chartBar").append("svg")
+                .attr("width", width).attr("height", height)
+                .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleLinear().domain(d3.extent(chartData, d => d.year)).range([0, innerWidth]);
+            const y = d3.scaleLinear().domain([0, d3.max(chartData, d => d.count)]).range([innerHeight, 0]);
+
+            svg.append("g").attr("transform", `translate(0,${innerHeight})`)
+               .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+            svg.append("g").call(d3.axisLeft(y));
+
+            const line = d3.line().x(d => x(d.year)).y(d => y(d.count)).curve(d3.curveMonotoneX);
+            svg.append("path").datum(chartData)
+               .attr("fill", "none").attr("stroke", "#009879").attr("stroke-width", 2)
+               .attr("d", line);
+
+            // Tooltip
+            let tooltip = document.getElementById("tooltip");
+            if (!tooltip) {
+                tooltip = document.createElement("div"); tooltip.id = "tooltip";
+                tooltip.style.cssText = "position:absolute; background:black; color:white; padding:5px; border-radius:4px; opacity:0; pointer-events:none;";
+                document.body.appendChild(tooltip);
+            }
+
+            svg.selectAll(".dot").data(chartData).enter().append("circle")
+               .attr("cx", d => x(d.year)).attr("cy", d => y(d.count)).attr("r", 4).attr("fill", "#009879")
+               .on("mouseover", (event, d) => {
+                   tooltip.style.opacity = 1;
+                   tooltip.innerHTML = `An: ${d.year}<br>Qty: ${d.count}`;
+                   tooltip.style.left = (event.pageX + 10) + "px";
+                   tooltip.style.top = (event.pageY - 20) + "px";
+               })
+               .on("mouseout", () => tooltip.style.opacity = 0);
         }
     </script>
 </body>
