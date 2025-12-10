@@ -1,141 +1,70 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analyse Complexe</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="dashboard-page">
+<script>
+        // --- SÉCURITÉ ADMIN ---
+        fetch('/api/session').then(r=>r.json()).then(d => {
+            // Si on est pas connecté OU qu'on n'est pas admin, on vire l'utilisateur
+            if(!d.loggedIn || d.user.role !== 'admin') window.location.href='accueil.html';
+        });
 
-    <div class="sidebar">
-        <h2>Menu</h2>
-        <nav>
-            <a href="accueil.html">🏠 Accueil</a>
-            <a href="projet.html">📊 Données CSV</a>
-            <a href="stats.html">📈 Statistiques</a>
-            <a href="complexe.html" class="active">🌟 Complexe</a>
-        </nav>
-    </div>
-
-    <main class="main-content">
-        <div class="table-page-container">
-            <h1 class="page-title">Les animés les plus populaires !</h1>
-
-            <div id="dashboardContent">
-                
-                <div class="chart-card" style="width: 100%; min-height: 600px; justify-content: center;">
-                                       
-                    <div id="zoneGraphique" style="width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; background:#f9f9f9; border:2px dashed #ddd; border-radius:10px; margin:20px;">
-                        
-                    </div>
-
-                </div>
-
-            </div>
-        </div>
-    </main>
-
-    <script>
-
-        // Recup data session (fonnées et user)
+        // --- GRAPHIQUE À BULLES ---
         const saved = sessionStorage.getItem('myDashboardData');
-        const dash = document.getElementById("dashboardContent");
-        
-        const allData = JSON.parse(saved);
+        if (saved) {
+            const allData = JSON.parse(saved);
             if (allData.length > 0) {
-                graphiqueGenre(allData);
+                 // On transforme les données et on dessine
+                 bullePopulaire(transformDataForPack(allData));
             }
+        } else {
+            document.getElementById("zoneGraphique").innerText = "Pas de données chargées.";
+        }
 
-        function bullePopulaire(data) {
+        // On doit grouper les animés par "Type" (TV, Movie, OVA...) pour faire des bulles
+        function transformDataForPack(data) {
+            const grouped = d3.rollup(data, v => v.length, d => d.Type || "Inconnu");
+            return Array.from(grouped, ([name, value]) => ({name, value}));
+        }
 
-            const container = document.getElementById("complexChart");
-            // Specify the dimensions of the chart.
-            const width = 900;
-            const height = width;
-            const margin = 1; // to avoid clipping the root circle stroke
-            const name = d => d.id.split(".").pop(); // "Strings" of "flare.util.Strings"
-            const group = d => d.id.split(".")[1]; // "util" of "flare.util.Strings"
-            const names = d => name(d).split(/(?=[A-Z][a-z])|\s+/g); // ["Legend", "Item"] of "flare.vis.legend.LegendItems"
+        // Dessin du "Circle Packing"
+        function bullePopulaire(dataHierarchy) {
+            const container = document.getElementById("zoneGraphique");
+            container.innerHTML = ""; // On vide si y'avait déjà un truc
 
-            // Specify the number format for values.
+            const width = 800;
+            const height = 800;
             const format = d3.format(",d");
+            const color = d3.scaleOrdinal(d3.schemeTableau10);
 
-            // Create the pack layout.
-            const pack = d3.pack()
-                .size([width - margin * 2, height - margin * 2])
-                .padding(3);
+            // On utilise le layout "Pack" de D3
+            const pack = d3.pack().size([width, height]).padding(3);
+            const root = pack(d3.hierarchy({children: dataHierarchy}).sum(d => d.value));
 
-            // Compute the hierarchy from the (flat) data; expose the values
-            // for each node; lastly apply the pack layout.
-            const root = pack(d3.hierarchy({children: data})
-                .sum(d => d.value));
-
-            // Create the SVG container.
             const svg = d3.create("svg")
                 .attr("width", width)
                 .attr("height", height)
-                .attr("viewBox", [-margin, -margin, width, height])
+                .attr("viewBox", [0, 0, width, height])
                 .attr("style", "max-width: 100%; height: auto; font: 10px sans-serif;")
                 .attr("text-anchor", "middle");
 
-            // Place each (leaf) node according to the layout’s x and y values.
             const node = svg.append("g")
-                .selectAll()
+                .selectAll("g")
                 .data(root.leaves())
                 .join("g")
                 .attr("transform", d => `translate(${d.x},${d.y})`);
 
-            // Add a filled circle.
+            // Les cercles
             node.append("circle")
                 .attr("fill-opacity", 0.7)
-                .attr("fill", d => color(group(d.data)))
+                .attr("fill", d => color(d.data.name))
                 .attr("r", d => d.r);
 
-            // Add a label.
-            const text = node.append("text")
-                .attr("clip-path", d => `circle(${d.r})`);
-
-            // Add a tspan for each CamelCase-separated word.
-            text.selectAll()
-                .data(d => names(d.data))
+            // Le texte dans les cercles
+            node.append("text")
+                .selectAll("tspan")
+                .data(d => [d.data.name, format(d.value)])
                 .join("tspan")
                 .attr("x", 0)
-                .attr("y", (d, i, nodes) => `${i - nodes.length / 2 + 0.35}em`)
+                .attr("y", (d, i, nodes) => `${i - nodes.length / 2 + 0.8}em`)
                 .text(d => d);
 
-            // Add a tspan for the node’s value.
-            text.append("tspan")
-                .attr("x", 0)
-                .attr("y", d => `${names(d.data).length / 2 + 0.35}em`)
-                .attr("fill-opacity", 0.7)
-                .text(d => format(d.value));
-
-            return Object.assign(svg.node(), {scales: {color}});
+            container.appendChild(svg.node());
         }
-
-
     </script>
-
-</body>
-</html>
-
-<!-- <script>
-    // Vérifier qui est connecté pour adapter le menu
-    fetch('/api/session')
-        .then(res => res.json())
-        .then(data => {
-            const menuComplexe = document.querySelector('a[href="complexe.html"]');
-            
-            if (!data.loggedIn) {
-                // Visiteur : on cache stats et complexe
-                if(menuComplexe) menuComplexe.style.display = 'none';
-                const menuStats = document.querySelector('a[href="stats.html"]');
-                if(menuStats) menuStats.style.display = 'none';
-            } else if (data.user.role !== 'admin') {
-                // User normal : on cache complexe
-                if(menuComplexe) menuComplexe.style.display = 'none';
-            }
-        });
-</script> -->

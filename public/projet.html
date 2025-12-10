@@ -1,57 +1,33 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Données CSV</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body class="dashboard-page">
+<script>
+        // --- GESTION DE L'AFFICHAGE SELON LE ROLE ---
+        // On demande au serveur "C'est qui qui est là ?"
+        fetch('/api/session').then(r=>r.json()).then(d => {
+            const linkStats = document.getElementById('linkStats');
+            const linkComplexe = document.getElementById('linkComplexe');
+            const btnLogout = document.getElementById('btnLogout');
 
-    <div class="sidebar">
-        <h2>Menu</h2>
-        <nav>
-            <a href="accueil.html">🏠 Accueil</a>
-            <a href="projet.html" class="active">📊 Données CSV</a>
-            <a href="stats.html">📈 Statistiques</a>
-            <a href="complexe.html" class="active">🌟 Complexe</a>
-        </nav>
-    </div>
+            if(!d.loggedIn) {
+                // C'est un visiteur : on cache les pages qu'il n'a pas le droit de voir
+                if(linkStats) linkStats.style.display='none';
+                if(linkComplexe) linkComplexe.style.display='none';
+            } else {
+                // C'est un membre : on affiche le bouton déconnexion
+                btnLogout.style.display = 'block';
+                // Si c'est pas un admin, on cache la page complexe
+                if (d.user.role !== 'admin') {
+                    if(linkComplexe) linkComplexe.style.display='none';
+                }
+            }
+        });
 
-    <main class="main-content">
-        <div class="table-page-container">
-            <h1 class="page-title">Tableau de Données</h1>
-            
-            <div class="controls">
-                <div class="control-group">
-                    <label>Charger un CSV</label>
-                    <input type="file" id="csvFileInput" accept=".csv">
-                </div>
-                <div class="control-group">
-                    <label>Rechercher</label>
-                    <input type="text" id="searchBar" placeholder="Tapez pour filtrer...">
-                </div>
-            </div>
-
-            <div id="tableauContainer">
-                <p style="text-align:center; padding:20px; color:#777;">En attente d'un fichier...</p>
-            </div>
-
-            <div id="paginationControls" class="pagination" style="display:none;">
-                <button id="btnPrev">Précédent</button>
-                <span id="pageInfo">Page 1</span>
-                <button id="btnNext">Suivant</button>
-            </div>
-        </div>
-    </main>
-
-    <script>
-        // --- VARIABLES ---
+        // --- TRAITEMENT DU CSV ---
         let allData = [];
         let filteredData = [];
         let columns = []; 
         let state = { page: 1, rowsPerPage: 50, sortCol: null, sortAsc: true };
 
-        // --- 1. LECTURE CSV INTELLIGENTE ---
+        // Fonction un peu costaud pour lire le CSV
+        // Elle gère les cas où il y a des virgules à l'intérieur des guillemets (ex: "Action, Drama")
         function csvToJson(str) {
             const rows = str.trim().split('\n');
             if (rows.length === 0) return { data: [], columns: [] };
@@ -60,21 +36,27 @@
                 const values = []; let currentVal = ""; let inQuotes = false;
                 for (let i=0; i<text.length; i++) {
                     const char = text[i];
-                    if (char === '"') inQuotes = !inQuotes;
-                    else if (char === ',' && !inQuotes) { values.push(currentVal); currentVal = ""; }
+                    if (char === '"') inQuotes = !inQuotes; // On entre ou on sort des guillemets
+                    else if (char === ',' && !inQuotes) { 
+                        // C'est une vraie séparation de colonne
+                        values.push(currentVal); currentVal = ""; 
+                    }
                     else currentVal += char;
                 }
                 values.push(currentVal); return values;
             }
 
+            // On récupère les titres des colonnes (première ligne)
             const headers = parseLine(rows[0]).map(h => h.trim().replace(/^"|"$/g, ''));
             const result = [];
+            
+            // On parcourt tout le reste
             for (let i=1; i<rows.length; i++) {
                 const rowStr = rows[i].trim(); if(!rowStr) continue;
                 const values = parseLine(rowStr); const obj = {};
                 headers.forEach((h, i) => {
                     let val = values[i] ? values[i].trim() : "";
-                    val = val.replace(/^"|"$/g, '').replace(/""/g, '"');
+                    val = val.replace(/^"|"$/g, '').replace(/""/g, '"'); // Nettoyage des guillemets
                     obj[h] = val;
                 });
                 result.push(obj);
@@ -82,7 +64,7 @@
             return { data: result, columns: headers };
         }
 
-        // --- 2. CHARGEMENT & SAUVEGARDE SESSION ---
+        // Quand on charge un fichier
         document.getElementById("csvFileInput").addEventListener("change", function(e) {
             const file = e.target.files[0]; if(!file) return;
             const reader = new FileReader();
@@ -91,34 +73,34 @@
                 const parsed = csvToJson(evt.target.result);
                 allData = parsed.data; columns = parsed.columns;
                 
-                // SAUVEGARDE SESSION STORAGE
+                // On essaie de sauvegarder dans la session pour les autres pages (stats)
                 try {
                     sessionStorage.setItem('myDashboardData', JSON.stringify(allData));
-                    alert("Données chargées dans la session !");
+                    alert("C'est bon, données chargées !");
                 } catch(err) {
-                    console.warn("Trop gros, échantillon 2000 lignes.");
+                    // Si le fichier est trop gros pour la mémoire du navigateur, on coupe
                     try {
                         const sample = allData.slice(0, 5000);
                         sessionStorage.setItem('myDashboardData', JSON.stringify(sample));
-                        alert("Fichier lourd : Seules les 2000 premières lignes sont dispo pour les stats.");
+                        alert("Fichier un peu gros : On a gardé que les 2000 premières lignes pour les stats.");
                     } catch(e2) {
-                        alert("Navigateur saturé : Impossible de garder les données pour les stats.");
+                        alert("Mémoire pleine : impossible de sauvegarder pour les stats.");
                     }
                 }
-
-                if(allData.length > 0) {
-                    filteredData = [...allData]; updateTable();
-                }
+                if(allData.length > 0) { filteredData = [...allData]; updateTable(); }
             };
         });
 
-        // --- 3. LOGIQUE TABLEAU ---
+        // Barre de recherche
         document.getElementById("searchBar").addEventListener("keyup", function(e) {
             const txt = e.target.value.toLowerCase();
+            // On regarde si le texte tapé existe dans n'importe quelle colonne de la ligne
             filteredData = allData.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(txt)));
-            state.page = 1; updateTable();
+            state.page = 1; // On revient page 1 quand on cherche
+            updateTable();
         });
 
+        // Pagination (Précédent / Suivant)
         document.getElementById("btnPrev").addEventListener("click", () => changePage(-1));
         document.getElementById("btnNext").addEventListener("click", () => changePage(1));
 
@@ -127,11 +109,14 @@
             if(state.page+d >= 1 && state.page+d <= max) { state.page+=d; updateTable(); }
         }
 
+        // Tri des colonnes quand on clique sur l'en-tête
         function sortData(col) {
             if (state.sortCol === col) state.sortAsc = !state.sortAsc; 
             else { state.sortCol = col; state.sortAsc = true; }
+            
             filteredData.sort((a, b) => {
                 let valA = a[col]||"", valB = b[col]||"";
+                // On essaie de trier comme des nombres si c'est possible, sinon comme du texte
                 const numA = parseFloat(valA), numB = parseFloat(valB);
                 if (!isNaN(numA) && !isNaN(numB)) return state.sortAsc ? numA-numB : numB-numA;
                 return state.sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
@@ -139,18 +124,25 @@
             updateTable();
         }
 
+        // Fonction d'affichage du tableau HTML
         function updateTable() {
             const container = document.getElementById("tableauContainer");
             const pag = document.getElementById("paginationControls");
             
-            if(filteredData.length===0) { container.innerHTML="<p style='text-align:center; padding:20px'>Aucune donnée.</p>"; pag.style.display="none"; return; }
+            if(filteredData.length===0) { 
+                container.innerHTML="<p style='text-align:center; padding:20px'>Rien trouvé.</p>"; 
+                pag.style.display="none"; return; 
+            }
             pag.style.display="flex";
 
+            // Calcul de quoi afficher pour la page actuelle
             const start=(state.page-1)*state.rowsPerPage;
             const data=filteredData.slice(start, start+state.rowsPerPage);
             const total=Math.ceil(filteredData.length/state.rowsPerPage);
-            document.getElementById("pageInfo").innerText = `Page ${state.page} / ${total} (${filteredData.length})`;
             
+            document.getElementById("pageInfo").innerText = `Page ${state.page} / ${total} (${filteredData.length} lignes)`;
+            
+            // Construction du tableau en JS
             container.innerHTML = "";
             const table = document.createElement("table");
             const thead = document.createElement("thead");
@@ -171,6 +163,7 @@
                 columns.forEach(col => {
                     const td = document.createElement("td");
                     let val = row[col] || "";
+                    // On coupe le texte s'il est trop long pour pas casser l'affichage
                     if(val.length > 50 && !val.startsWith("http")) val = val.substring(0,50)+"...";
                     td.textContent = val;
                     tr.appendChild(td);
@@ -180,7 +173,7 @@
             table.appendChild(thead); table.appendChild(tbody); container.appendChild(table);
         }
 
-        // Restauration auto
+        // Au chargement de la page, on regarde si on a déjà des données en mémoire
         window.addEventListener('DOMContentLoaded', () => {
             const saved = sessionStorage.getItem('myDashboardData');
             if(saved) { 
@@ -189,5 +182,3 @@
             }
         });
     </script>
-</body>
-</html>
