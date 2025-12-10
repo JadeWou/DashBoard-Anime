@@ -1,52 +1,99 @@
-<script>
-        // --- GESTION DE L'AFFICHAGE SELON LE ROLE ---
-        // On demande au serveur "C'est qui qui est là ?"
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Données CSV</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <nav>
+            <a href="accueil.html">🏠 Accueil</a>
+            <a href="projet.html" class="active">📊 Données CSV</a>
+            <a href="stats.html" id="linkStats">📈 Statistiques</a>
+            <a href="complexe.html" id="linkComplexe">🌟 Complexe</a>
+            <a href="/api/logout" id="btnLogout" style="margin-top:20px; color:#e74c3c; display:none;">🚪 Déconnexion</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Tableau de Données</h1>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>Charger un CSV</label>
+                    <input type="file" id="csvFileInput" accept=".csv">
+                </div>
+                <div class="control-group">
+                    <label>Rechercher</label>
+                    <input type="text" id="searchBar" placeholder="Tapez pour filtrer...">
+                </div>
+            </div>
+
+            <div id="tableauContainer">
+                <p style="text-align:center; padding:20px; color:#777;">En attente d'un fichier...</p>
+            </div>
+
+            <div id="paginationControls" class="pagination" style="display:none;">
+                <button id="btnPrev">Précédent</button>
+                <span id="pageInfo">Page 1</span>
+                <button id="btnNext">Suivant</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- 1. GESTION DES ROLES (Visiteur / User / Admin) ---
+        // On demande au serveur "C'est qui qui est connecté ?"
         fetch('/api/session').then(r=>r.json()).then(d => {
             const linkStats = document.getElementById('linkStats');
             const linkComplexe = document.getElementById('linkComplexe');
             const btnLogout = document.getElementById('btnLogout');
 
-            if(!d.loggedIn) {
-                // C'est un visiteur : on cache les pages qu'il n'a pas le droit de voir
-                if(linkStats) linkStats.style.display='none';
-                if(linkComplexe) linkComplexe.style.display='none';
-            } else {
-                // C'est un membre : on affiche le bouton déconnexion
-                btnLogout.style.display = 'block';
-                // Si c'est pas un admin, on cache la page complexe
-                if (d.user.role !== 'admin') {
-                    if(linkComplexe) linkComplexe.style.display='none';
+            // On vérifie que les liens existent bien dans la page avant de changer leur style
+            if(linkStats && linkComplexe && btnLogout) {
+                if(!d.loggedIn) {
+                    // C'est un VISITEUR : on cache les stats et le complexe
+                    linkStats.style.display='none';
+                    linkComplexe.style.display='none';
+                } else {
+                    // C'est un MEMBRE : on affiche le bouton déconnexion
+                    btnLogout.style.display = 'block';
+                    // Si c'est un User normal (pas admin), on cache la page complexe
+                    if (d.user.role !== 'admin') {
+                        linkComplexe.style.display='none';
+                    }
                 }
             }
         });
 
-        // --- TRAITEMENT DU CSV ---
+        // --- 2. LOGIQUE DU TABLEAU CSV ---
         let allData = [];
         let filteredData = [];
         let columns = []; 
         let state = { page: 1, rowsPerPage: 50, sortCol: null, sortAsc: true };
 
-        // Fonction un peu costaud pour lire le CSV
-        // Elle gère les cas où il y a des virgules à l'intérieur des guillemets (ex: "Action, Drama")
+        // Fonction pour transformer le texte du CSV en objets JSON utilisables
         function csvToJson(str) {
-            const rows = str.trim().split('\n');
+            const rows = str.trim().split('\n'); // On coupe ligne par ligne
             if (rows.length === 0) return { data: [], columns: [] };
 
+            // Petite fonction pour gérer les virgules qui sont DANS les guillemets (ex: "Action, Drame")
             function parseLine(text) {
                 const values = []; let currentVal = ""; let inQuotes = false;
                 for (let i=0; i<text.length; i++) {
                     const char = text[i];
-                    if (char === '"') inQuotes = !inQuotes; // On entre ou on sort des guillemets
-                    else if (char === ',' && !inQuotes) { 
-                        // C'est une vraie séparation de colonne
-                        values.push(currentVal); currentVal = ""; 
-                    }
+                    if (char === '"') inQuotes = !inQuotes;
+                    else if (char === ',' && !inQuotes) { values.push(currentVal); currentVal = ""; }
                     else currentVal += char;
                 }
                 values.push(currentVal); return values;
             }
 
-            // On récupère les titres des colonnes (première ligne)
+            // On récupère les titres (première ligne)
             const headers = parseLine(rows[0]).map(h => h.trim().replace(/^"|"$/g, ''));
             const result = [];
             
@@ -56,7 +103,7 @@
                 const values = parseLine(rowStr); const obj = {};
                 headers.forEach((h, i) => {
                     let val = values[i] ? values[i].trim() : "";
-                    val = val.replace(/^"|"$/g, '').replace(/""/g, '"'); // Nettoyage des guillemets
+                    val = val.replace(/^"|"$/g, '').replace(/""/g, '"'); // Nettoyage
                     obj[h] = val;
                 });
                 result.push(obj);
@@ -64,59 +111,72 @@
             return { data: result, columns: headers };
         }
 
-        // Quand on charge un fichier
-        document.getElementById("csvFileInput").addEventListener("change", function(e) {
-            const file = e.target.files[0]; if(!file) return;
-            const reader = new FileReader();
-            reader.readAsText(file);
-            reader.onload = function(evt) {
-                const parsed = csvToJson(evt.target.result);
-                allData = parsed.data; columns = parsed.columns;
-                
-                // On essaie de sauvegarder dans la session pour les autres pages (stats)
-                try {
-                    sessionStorage.setItem('myDashboardData', JSON.stringify(allData));
-                    alert("C'est bon, données chargées !");
-                } catch(err) {
-                    // Si le fichier est trop gros pour la mémoire du navigateur, on coupe
-                    try {
-                        const sample = allData.slice(0, 5000);
-                        sessionStorage.setItem('myDashboardData', JSON.stringify(sample));
-                        alert("Fichier un peu gros : On a gardé que les 2000 premières lignes pour les stats.");
-                    } catch(e2) {
-                        alert("Mémoire pleine : impossible de sauvegarder pour les stats.");
-                    }
-                }
-                if(allData.length > 0) { filteredData = [...allData]; updateTable(); }
-            };
-        });
+        // On attend que le HTML soit prêt avant d'attacher les événements (clics, chargement...)
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById("csvFileInput");
+            const searchInput = document.getElementById("searchBar");
+            const btnPrev = document.getElementById("btnPrev");
+            const btnNext = document.getElementById("btnNext");
 
-        // Barre de recherche
-        document.getElementById("searchBar").addEventListener("keyup", function(e) {
-            const txt = e.target.value.toLowerCase();
-            // On regarde si le texte tapé existe dans n'importe quelle colonne de la ligne
-            filteredData = allData.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(txt)));
-            state.page = 1; // On revient page 1 quand on cherche
-            updateTable();
-        });
+            // Si le champ d'upload existe, on écoute le changement
+            if(fileInput) {
+                fileInput.addEventListener("change", function(e) {
+                    const file = e.target.files[0]; if(!file) return;
+                    const reader = new FileReader();
+                    reader.readAsText(file);
+                    reader.onload = function(evt) {
+                        const parsed = csvToJson(evt.target.result);
+                        allData = parsed.data; columns = parsed.columns;
+                        
+                        // On sauvegarde dans la session pour les graphiques (page stats)
+                        try {
+                            sessionStorage.setItem('myDashboardData', JSON.stringify(allData));
+                            alert("C'est chargé !");
+                        } catch(err) {
+                            // Gestion d'erreur si le fichier est trop gros
+                            try {
+                                const sample = allData.slice(0, 5000);
+                                sessionStorage.setItem('myDashboardData', JSON.stringify(sample));
+                                alert("Fichier un peu lourd : On sauvegarde une partie pour les stats.");
+                            } catch(e2) {}
+                        }
+                        if(allData.length > 0) { filteredData = [...allData]; updateTable(); }
+                    };
+                });
+            }
 
-        // Pagination (Précédent / Suivant)
-        document.getElementById("btnPrev").addEventListener("click", () => changePage(-1));
-        document.getElementById("btnNext").addEventListener("click", () => changePage(1));
+            // Recherche dynamique
+            if(searchInput) {
+                searchInput.addEventListener("keyup", function(e) {
+                    const txt = e.target.value.toLowerCase();
+                    filteredData = allData.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(txt)));
+                    state.page = 1; updateTable();
+                });
+            }
+
+            // Pagination
+            if(btnPrev) btnPrev.addEventListener("click", () => changePage(-1));
+            if(btnNext) btnNext.addEventListener("click", () => changePage(1));
+            
+            // Si on revient sur la page, on recharge les données qu'on avait
+            const saved = sessionStorage.getItem('myDashboardData');
+            if(saved) { 
+                try { allData = JSON.parse(saved); columns = Object.keys(allData[0]); filteredData=[...allData]; updateTable(); } 
+                catch(e){} 
+            }
+        });
 
         function changePage(d) {
             const max = Math.ceil(filteredData.length/state.rowsPerPage);
             if(state.page+d >= 1 && state.page+d <= max) { state.page+=d; updateTable(); }
         }
 
-        // Tri des colonnes quand on clique sur l'en-tête
+        // Tri des colonnes (nombres ou texte)
         function sortData(col) {
             if (state.sortCol === col) state.sortAsc = !state.sortAsc; 
             else { state.sortCol = col; state.sortAsc = true; }
-            
             filteredData.sort((a, b) => {
                 let valA = a[col]||"", valB = b[col]||"";
-                // On essaie de trier comme des nombres si c'est possible, sinon comme du texte
                 const numA = parseFloat(valA), numB = parseFloat(valB);
                 if (!isNaN(numA) && !isNaN(numB)) return state.sortAsc ? numA-numB : numB-numA;
                 return state.sortAsc ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
@@ -129,20 +189,15 @@
             const container = document.getElementById("tableauContainer");
             const pag = document.getElementById("paginationControls");
             
-            if(filteredData.length===0) { 
-                container.innerHTML="<p style='text-align:center; padding:20px'>Rien trouvé.</p>"; 
-                pag.style.display="none"; return; 
-            }
+            if(filteredData.length===0) { container.innerHTML="<p style='text-align:center; padding:20px'>Aucune donnée.</p>"; pag.style.display="none"; return; }
             pag.style.display="flex";
-
-            // Calcul de quoi afficher pour la page actuelle
+            
             const start=(state.page-1)*state.rowsPerPage;
             const data=filteredData.slice(start, start+state.rowsPerPage);
             const total=Math.ceil(filteredData.length/state.rowsPerPage);
+            document.getElementById("pageInfo").innerText = `Page ${state.page} / ${total}`;
             
-            document.getElementById("pageInfo").innerText = `Page ${state.page} / ${total} (${filteredData.length} lignes)`;
-            
-            // Construction du tableau en JS
+            // On reconstruit le tableau de zéro
             container.innerHTML = "";
             const table = document.createElement("table");
             const thead = document.createElement("thead");
@@ -163,7 +218,7 @@
                 columns.forEach(col => {
                     const td = document.createElement("td");
                     let val = row[col] || "";
-                    // On coupe le texte s'il est trop long pour pas casser l'affichage
+                    // On coupe si c'est trop long
                     if(val.length > 50 && !val.startsWith("http")) val = val.substring(0,50)+"...";
                     td.textContent = val;
                     tr.appendChild(td);
@@ -172,13 +227,6 @@
             });
             table.appendChild(thead); table.appendChild(tbody); container.appendChild(table);
         }
-
-        // Au chargement de la page, on regarde si on a déjà des données en mémoire
-        window.addEventListener('DOMContentLoaded', () => {
-            const saved = sessionStorage.getItem('myDashboardData');
-            if(saved) { 
-                try { allData = JSON.parse(saved); columns = Object.keys(allData[0]); filteredData=[...allData]; updateTable(); } 
-                catch(e){} 
-            }
-        });
     </script>
+</body>
+</html>

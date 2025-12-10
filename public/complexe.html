@@ -1,39 +1,74 @@
-<script>
-        // --- SÉCURITÉ ADMIN ---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse Complexe</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu Admin</h2>
+        <nav>
+            <a href="accueil.html">🏠 Accueil</a>
+            <a href="projet.html">📊 Données CSV</a>
+            <a href="stats.html">📈 Statistiques</a>
+            <a href="complexe.html" class="active">🌟 Complexe</a>
+            <a href="/api/logout" style="margin-top:20px; color:#e74c3c;">🚪 Déconnexion</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Les animés les plus populaires !</h1>
+
+            <div id="dashboardContent">
+                <div class="chart-card" style="width: 100%; min-height: 600px; justify-content: center;">
+                    <div id="zoneGraphique" style="width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; background:#f9f9f9; border:2px dashed #ddd; border-radius:10px; margin:20px;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- VÉRIFICATION SÉCURITÉ (Admin Only) ---
         fetch('/api/session').then(r=>r.json()).then(d => {
-            // Si on est pas connecté OU qu'on n'est pas admin, on vire l'utilisateur
+            // Si pas connecté OU si le rôle n'est pas 'admin', on renvoie à l'accueil
             if(!d.loggedIn || d.user.role !== 'admin') window.location.href='accueil.html';
         });
 
-        // --- GRAPHIQUE À BULLES ---
+        // --- CODE D3 (Graphique à bulles) ---
         const saved = sessionStorage.getItem('myDashboardData');
         if (saved) {
             const allData = JSON.parse(saved);
             if (allData.length > 0) {
-                 // On transforme les données et on dessine
+                 // On prépare les données et on lance le dessin
                  bullePopulaire(transformDataForPack(allData));
             }
         } else {
-            document.getElementById("zoneGraphique").innerText = "Pas de données chargées.";
+            document.getElementById("zoneGraphique").innerText = "Merci de charger le CSV d'abord.";
         }
 
-        // On doit grouper les animés par "Type" (TV, Movie, OVA...) pour faire des bulles
+        // Fonction pour grouper les animés par 'Type' (TV, Movie, OVA...)
+        // D3.pack a besoin d'une hiérarchie (Parent > Enfant)
         function transformDataForPack(data) {
             const grouped = d3.rollup(data, v => v.length, d => d.Type || "Inconnu");
             return Array.from(grouped, ([name, value]) => ({name, value}));
         }
 
-        // Dessin du "Circle Packing"
         function bullePopulaire(dataHierarchy) {
             const container = document.getElementById("zoneGraphique");
-            container.innerHTML = ""; // On vide si y'avait déjà un truc
+            container.innerHTML = ""; // On vide avant de dessiner
 
             const width = 800;
             const height = 800;
             const format = d3.format(",d");
-            const color = d3.scaleOrdinal(d3.schemeTableau10);
+            const color = d3.scaleOrdinal(d3.schemeTableau10); // Belle palette de couleurs
 
-            // On utilise le layout "Pack" de D3
+            // Configuration du Layout "Pack" (Cercles dans des cercles)
             const pack = d3.pack().size([width, height]).padding(3);
             const root = pack(d3.hierarchy({children: dataHierarchy}).sum(d => d.value));
 
@@ -50,13 +85,13 @@
                 .join("g")
                 .attr("transform", d => `translate(${d.x},${d.y})`);
 
-            // Les cercles
+            // On dessine les cercles
             node.append("circle")
                 .attr("fill-opacity", 0.7)
                 .attr("fill", d => color(d.data.name))
                 .attr("r", d => d.r);
 
-            // Le texte dans les cercles
+            // On ajoute le texte (Nom du type + nombre)
             node.append("text")
                 .selectAll("tspan")
                 .data(d => [d.data.name, format(d.value)])
@@ -68,3 +103,5 @@
             container.appendChild(svg.node());
         }
     </script>
+</body>
+</html>

@@ -1,29 +1,76 @@
-<script>
-        // --- SÉCURITÉ CÔTÉ CLIENT ---
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Statistiques</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dashboard-page">
+
+    <div class="sidebar">
+        <h2>Menu</h2>
+        <nav>
+            <a href="accueil.html">🏠 Accueil</a>
+            <a href="projet.html">📊 Données CSV</a>
+            <a href="stats.html" class="active">📈 Statistiques</a>
+            <a href="complexe.html" id="linkComplexe">🌟 Complexe</a>
+            <a href="/api/logout" style="margin-top:20px; color:#e74c3c;">🚪 Déconnexion</a>
+        </nav>
+    </div>
+
+    <main class="main-content">
+        <div class="table-page-container">
+            <h1 class="page-title">Tableau de Bord</h1>
+
+            <div id="dashboardContent">
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>Répartition par Genre</h3>
+                        <div id="graphGenre"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Top 10 (Barres)</h3>
+                        <div id="chartBar"></div> 
+                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Graphique complexe</h3>
+                        <div id="chartComplexPreview"></div> 
+                        <p style="color:#ccc; margin-top:50px;">(Graphique à venir)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- SÉCURITÉ CÔTÉ NAVIGATEUR ---
         fetch('/api/session').then(r=>r.json()).then(d => {
-            // Si le serveur dit qu'on n'est pas connecté, on renvoie à l'accueil
+            // Si le serveur dit qu'on n'est pas connecté, hop retour accueil
             if(!d.loggedIn) window.location.href='accueil.html';
             
-            // Si on n'est pas admin, on cache le lien vers la page complexe
-            if(d.user.role !== 'admin') document.getElementById('linkComplexe').style.display='none';
+            // Si on n'est pas admin, on cache le lien complexe
+            const linkComplexe = document.getElementById('linkComplexe');
+            if(d.user.role !== 'admin' && linkComplexe) {
+                linkComplexe.style.display='none';
+            }
         });
 
         // --- GRAPHIQUES D3 ---
-        // On récupère les données CSV qu'on a stockées dans le navigateur
         const saved = sessionStorage.getItem('myDashboardData');
         
         if (saved) {
              const allData = JSON.parse(saved);
              if (allData.length > 0) graphiqueGenre(allData);
         } else {
-             document.getElementById("dashboardContent").innerHTML = "<p style='text-align:center'>Il faut charger un fichier CSV dans l'onglet 'Données CSV' d'abord !</p>";
+             document.getElementById("dashboardContent").innerHTML = "<p style='text-align:center'>Oups ! Il faut charger un fichier CSV dans l'onglet 'Données CSV' d'abord.</p>";
         }
 
         function graphiqueGenre(data) {
-            // 1. Préparation des données : On compte combien d'animés par genre
+            // 1. On compte les genres (Action, Comédie, etc.)
             const nbGenre = {};
             data.forEach(item => {
-                // On cherche la colonne qui contient "Genre" ou "Genres"
                 const key = Object.keys(item).find(k => k.toLowerCase().includes("genre"));
                 if (key && item[key]) {
                     // On sépare les genres (ex: "Action, Comedy" -> "Action" et "Comedy")
@@ -34,38 +81,39 @@
                 }
             });
 
-            // On garde seulement les 8 genres les plus fréquents pour pas surcharger le camembert
+            // On garde seulement le top 8 pour que le graphique reste lisible
             const chartData = Object.entries(nbGenre)
-                .sort((a, b) => b[1] - a[1]) // Tri décroissant
+                .sort((a, b) => b[1] - a[1]) // Tri du plus grand au plus petit
                 .slice(0, 8)
                 .map(([label, value]) => ({ label, value }));
 
-            // 2. Dessin avec D3.js
+            // 2. Configuration D3
             const width = 400;
             const height = 300;
             const margin = 20;
             const radius = Math.min(width, height) / 2 - margin;
             
+            // Création de la zone de dessin (SVG)
             const svg = d3.select("#graphGenre").append("svg")
                 .attr("width", width)
                 .attr("height", height)
                 .append("g")
-                .attr("transform", `translate(${width/2 - 60}, ${height/2})`); // On centre le dessin
+                .attr("transform", `translate(${width/2 - 60}, ${height/2})`);
 
-            const color = d3.scaleOrdinal(d3.schemeSet2); // Palette de couleurs auto
+            const color = d3.scaleOrdinal(d3.schemeSet2); // Couleurs auto
             const pie = d3.pie().value(d => d.value);
             const data_ready = pie(chartData);
             const arc = d3.arc().innerRadius(0).outerRadius(radius);
 
-            // Dessin des parts du camembert
+            // Dessin des parts
             svg.selectAll('path').data(data_ready).enter().append('path')
               .attr('d', arc).attr('fill', d => color(d.data.label))
               .attr("stroke", "white").style("stroke-width", "2px").style("opacity", 0.9)
-              // Petit effet quand on passe la souris
+              // Petit effet au survol de la souris
               .on("mouseover", function() { d3.select(this).style("opacity", 1); })
               .on("mouseout", function() { d3.select(this).style("opacity", 0.9); });
 
-            // Ajout de la légende à droite
+            // Ajout de la légende
             const legend = svg.append("g").attr("transform", `translate(${radius + 10}, -${radius})`);
             chartData.forEach((d, i) => {
                 const row = legend.append("g").attr("transform", `translate(0, ${i * 25})`);
@@ -75,3 +123,5 @@
             });
         }
     </script>
+</body>
+</html>
