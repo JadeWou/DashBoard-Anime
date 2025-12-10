@@ -65,6 +65,29 @@
         let allData = [], filteredData = [], columns = []; 
         let state = { page: 1, rowsPerPage: 50, sortCol: null, sortAsc: true };
 
+        // Dictionnaire de traduction (Anglais CSV -> Français Affichage)
+        const traductions = {
+            "title": "Titre",
+            "image": "Image",
+            "Type": "Type",
+            "Episodes": "Épisodes",
+            "Status": "Statut",
+            "Premiered": "Saison de sortie",
+            "Released_Season": "Saison",
+            "Released_Year": "Année",
+            "Genres": "Genres",
+            "Themes": "Thèmes",
+            "Studios": "Studios",
+            "Producers": "Producteurs",
+            "Demographic": "Cible",
+            "Rating": "Classification",
+            "Score": "Note",
+            "Ranked": "Rang",
+            "Popularity": "Popularité",
+            "Members": "Membres",
+            "Favorites": "Favoris"
+        };
+
         function csvToJson(str) {
             const rows = str.trim().split('\n');
             if (rows.length === 0) return { data: [], columns: [] };
@@ -95,7 +118,6 @@
             return { data: result, columns: headers };
         }
 
-        // On vérifie que l'élément existe avant d'ajouter l'event (Correction du bug null)
         const fileInput = document.getElementById("csvFileInput");
         if(fileInput) {
             fileInput.addEventListener("change", function(e) {
@@ -171,9 +193,14 @@
             const trHead = document.createElement("tr");
 
             columns.forEach(col => {
+                // MODIFICATION ICI : On utilise la traduction si elle existe, sinon le nom original
+                const label = traductions[col] || col; 
+                
                 const th = document.createElement("th");
-                th.textContent = col + (col === state.sortCol ? (state.sortAsc ? " ▲" : " ▼") : "");
+                // On ajoute la flèche de tri à côté du nom traduit
+                th.textContent = label + (col === state.sortCol ? (state.sortAsc ? " ▲" : " ▼") : "");
                 th.style.cursor = "pointer";
+                // Important : on continue de trier avec 'col' (la clé anglaise) pour que la logique marche
                 th.addEventListener("click", () => sortData(col));
                 trHead.appendChild(th);
             });
@@ -184,8 +211,14 @@
                 columns.forEach(col => {
                     const td = document.createElement("td");
                     let val = row[col] || "";
-                    if(val.length > 50 && !val.startsWith("http")) val = val.substring(0,50)+"...";
-                    td.textContent = val;
+                    
+                    // Si c'est une image, on affiche une miniature (optionnel mais sympa)
+                    if(col === "image" && val.startsWith("http")) {
+                        td.innerHTML = `<img src="${val}" style="height:30px; border-radius:4px;">`;
+                    } else {
+                        if(val.length > 50 && !val.startsWith("http")) val = val.substring(0,50)+"...";
+                        td.textContent = val;
+                    }
                     tr.appendChild(td);
                 });
                 tbody.appendChild(tr);
